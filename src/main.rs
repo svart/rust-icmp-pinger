@@ -86,7 +86,7 @@ impl Echo {
 
     fn serialize<'a, W: io::Write + 'a>(&'a self) -> impl cf::SerializeFn<W> + 'a {
         use cf::{bytes::be_u16, sequence::tuple};
-        tuple((be_u16(self.identifier), be_u16(self.sequence_number)))
+        tuple((be_u16(self.identifier), be_u16(self.sequence_number), self.data.serialize()))
     }
 }
 
