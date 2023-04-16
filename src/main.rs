@@ -16,9 +16,9 @@ struct Icmp {
 
 impl Icmp {
     fn parse(i: &[u8]) -> Self {
-        let (i, icmp_type) = be_u8::<&[u8], ()>(&i[..]).unwrap();
-        let (i, code) = be_u8::<&[u8], ()>(&i[..]).unwrap();
-        let (i, checksum) = be_u16::<&[u8], ()>(&i[..]).unwrap();
+        let (i, icmp_type) = be_u8::<&[u8], ()>(i).unwrap();
+        let (i, code) = be_u8::<&[u8], ()>(i).unwrap();
+        let (i, checksum) = be_u16::<&[u8], ()>(i).unwrap();
 
         Self {
             icmp_type,
@@ -74,8 +74,8 @@ struct Echo {
 
 impl Echo {
     fn parse(i: &[u8]) -> Self {
-        let (i, identifier) = be_u16::<&[u8], ()>(&i[..]).unwrap();
-        let (i, sequence_number) = be_u16::<&[u8], ()>(&i[..]).unwrap();
+        let (i, identifier) = be_u16::<&[u8], ()>(i).unwrap();
+        let (i, sequence_number) = be_u16::<&[u8], ()>(i).unwrap();
 
         Self {
             identifier,
@@ -128,7 +128,6 @@ fn main() -> io::Result<()> {
     socket.set_read_timeout(Some(Duration::from_secs(1)))?;
 
     let ip_str = std::env::args()
-        .into_iter()
         .nth(1)
         .expect("usage: icmp-pinger IP_ADDR");
 
