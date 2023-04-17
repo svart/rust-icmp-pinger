@@ -7,6 +7,9 @@ use cookie_factory as cf;
 use nom::number::complete::{be_u16, be_u8};
 use socket2::{Domain, Protocol, Socket, Type};
 
+type Input<'a> = &'a[u8];
+type Result<'a, T> = nom::IResult<Input<'a>, T, ()>;
+
 struct Icmp {
     icmp_type: u8,
     code: u8,
@@ -15,17 +18,21 @@ struct Icmp {
 }
 
 impl Icmp {
-    fn parse(i: &[u8]) -> Self {
-        let (i, icmp_type) = be_u8::<&[u8], ()>(i).unwrap();
-        let (i, code) = be_u8::<&[u8], ()>(i).unwrap();
-        let (i, checksum) = be_u16::<&[u8], ()>(i).unwrap();
+    fn parse(i: Input) -> Result<Self> {
+        let (i, icmp_type) = be_u8::<&[u8], ()>(i)?;
+        let (i, code) = be_u8::<&[u8], ()>(i)?;
+        let (i, checksum) = be_u16::<&[u8], ()>(i)?;
+        let (i, msg) = IcmpMsg::parse(icmp_type, i)?;
 
-        Self {
-            icmp_type,
-            code,
-            checksum,
-            msg: IcmpMsg::parse(icmp_type, i),
-        }
+        Ok((
+            i,
+            Self {
+                icmp_type,
+                code,
+                checksum,
+                msg,
+            }
+        ))
     }
 
     fn serialize<'a, W: io::Write + 'a>(&'a self) -> impl cf::SerializeFn<W> + 'a {
@@ -50,12 +57,20 @@ enum IcmpMsg {
 }
 
 impl IcmpMsg {
-    fn parse(icmp_type: u8, i: &[u8]) -> Self {
-        match icmp_type {
-            0 => IcmpMsg::EchoResponse(Echo::parse(i)),
-            8 => IcmpMsg::EchoRequest(Echo::parse(i)),
+    fn parse(icmp_type: u8, i: Input) -> Result<Self> {
+        let (i, echo) = match icmp_type {
+            0 => {
+                let (i, echo) = Echo::parse(i)?;
+                (i, IcmpMsg::EchoResponse(echo))
+            },
+            8 => {
+                let (i, echo) = Echo::parse(i)?;
+                (i, IcmpMsg::EchoRequest(echo))
+            },
             _ => panic!("unexpected icmp type: {icmp_type}"),
-        }
+        };
+
+        Ok((i, echo))
     }
 
     fn serialize<'a, W: io::Write + 'a>(&'a self) -> impl cf::SerializeFn<W> + 'a {
@@ -73,15 +88,18 @@ struct Echo {
 }
 
 impl Echo {
-    fn parse(i: &[u8]) -> Self {
-        let (i, identifier) = be_u16::<&[u8], ()>(i).unwrap();
-        let (i, sequence_number) = be_u16::<&[u8], ()>(i).unwrap();
+    fn parse(i: Input) -> Result<Self> {
+        let (i, identifier) = be_u16::<&[u8], ()>(i)?;
+        let (i, sequence_number) = be_u16::<&[u8], ()>(i)?;
 
-        Self {
-            identifier,
-            sequence_number,
-            data: Bytes::new(i),
-        }
+        Ok((
+            i,
+            Self {
+                identifier,
+                sequence_number,
+                data: Bytes::new(i),
+            }
+        ))
     }
 
     fn serialize<'a, W: io::Write + 'a>(&'a self) -> impl cf::SerializeFn<W> + 'a {
@@ -164,7 +182,7 @@ fn main() -> io::Result<()> {
             .map(|x| unsafe { x.assume_init() })
             .collect();
 
-        let echo_resp = Icmp::parse(&recv_buf);
+        let (_, echo_resp) = Icmp::parse(&recv_buf).unwrap();
 
         match echo_resp.msg {
             IcmpMsg::EchoResponse(echo) => {
